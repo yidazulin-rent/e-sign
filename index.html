@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>線上簽名</title>
+  <!--
+    viewport 設定：禁止縮放（maximum-scale=1.0），避免使用者雙指放大縮小
+    以免影響簽名與畫布座標的對應關係。
+  -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <style>
+    /* === 整體版面 === */
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 12px;
+      background: #f5f5f5;
+      color: #222;
+      font-size: 24px; /* 全站基準字體大小 */
+    }
+
+    /* 簽名板 / 覆蓋預覽開啟時，鎖住背景頁的捲動與觸控 */
+    body.noscroll {
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin: 0 0 10px;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    /* 簡短步驟說明（保留一行就好） */
+    .hint {
+      font-size: 1.2rem;
+      color: #555;
+      margin-bottom: 10px;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    /* 上方 toolbar：只放「選擇簽單圖片」，佔滿寬度 */
+    .toolbar {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 10px;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .toolbar-top {
+      margin-top: 4px;
+    }
+
+    .toolbar-actions {
+      margin-top: 10px;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+      display: flex;
+      gap: 8px;
+    }
+
+    button,
+    input[type="file"] {
+      font-size: 1.95rem; /* 按鈕字體特大：方便長輩閱讀 */
+      padding: 0.7rem 0.9rem;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* 檔案選擇按鈕外觀：頂部單顆大按鈕，佔滿寬度 */
+    .file-label {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: #ffffff;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 0.7rem 0.9rem;
+      font-size: 1.95rem;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    /* 真正的檔案 input 隱藏，留好看的按鈕外觀 */
+    #bgUpload {
+      display: none;
+    }
+
+    .canvas-wrapper {
+      background: #ddd;
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 10px;
+      max-width: 900px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /*
+      預覽簽單的主畫布（簽單＋簽名），
+      實際解析度用 JS 設定，這裡只控制顯示寬度。
+    */
+    #previewCanvas {
+      width: 100%;
+      height: auto;
+      background: #fff;
+      border-radius: 4px;
+      touch-action: none;
+    }
+
+    /* 下方動作按鈕列：簽名板＋生成圖片 兩顆並排，寬度自動平均 */
+    .toolbar-actions button {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* 之前的簽名位置調整 UI：現在不用了，直接固定座標，所以整塊隱藏 */
+    .sig-controls {
+      display: none;
+    }
+
+    /* 舊的結果區塊保留但隱藏（實際不用） */
+    .result-wrapper {
+      display: none;
+    }
+
+    .result-image {
+      display: none;
+    }
+
+    /* === 簽名板 Overlay（全螢幕） === */
+    #signPadOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: none;          /* 需要簽名才打開 */
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      overscroll-behavior: contain;
+      touch-action: none;
+    }
+
+    #signPadOverlay.active {
+      display: flex;
+    }
+
+    .sign-pad-box {
+      background: #fff;
+      width: calc(100% - 32px);
+      max-width: 900px;
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .sign-pad-title {
+      font-size: 1.3rem;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .sign-canvas-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    /*
+      真正簽名用的畫布：
+      - 實際解析度由 JS 根據裝置 pixelRatio 設定
+      - CSS 定義在畫面中看到的大小
+    */
+    #signCanvas {
+      width: 100%;
+      height: 260px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      background: #fff;
+      touch-action: none;
+      display: block;
+    }
+
+    .sign-pad-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .sign-pad-buttons button {
+      flex: 1;
+      min-width: 90px;
+    }
+
+    .btn-primary {
+      background: #007bff;
+      color: #fff;
+      border-color: #007bff;
+    }
+
+    .btn-danger {
+      background: #ff4d4f;
+      color: #fff;
+      border-color: #ff4d4f;
+    }
+
+    .btn-secondary {
+      background: #f0f0f0;
+    }
+
+    .small-hint {
+      font-size: 0.95rem;
+      color: #777;
+      text-align: center;
+    }
+
+    /* === 生成結果覆蓋預覽框（A 方案） === */
+    #resultOverlay {
+      position: fixed;
+      inset: 0;
+      background: #ffffff;
+      display: none;           /* 生成圖片後才打開 */
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    .result-overlay-inner {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+    }
+
+    #resultFinal {
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+
+    .result-overlay-title {
+      font-size: 1.6rem;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 2px;
+    }
+
+    .result-overlay-hint {
+      font-size: 1.75rem;
+      color: #555;
+      text-align: center;
+      margin-bottom: 6px;
+      line-height: 1.5;
+    }
+
+    /* 結果覆蓋框的兩顆按鈕：一列一顆、滿版寬度 */
+    .result-overlay-buttons {
+      display: flex;
+      flex-direction: column;   /* 垂直排列，一列一顆 */
+      gap: 8px;
+      width: 100%;
+      margin-top: 4px;
+    }
+
+    .result-overlay-buttons button {
+      width: 100%;
+      font-size: 1.85rem;
+      padding: 0.9rem 0.9rem;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <h1>線上簽名</h1>
+
+  <!-- 上方：只有「選擇簽單圖片」這一顆大按鈕 -->
+  <div class="toolbar toolbar-top">
+    <label class="file-label">
+       ① 選擇簽單 📂
+      <input type="file" id="bgUpload" accept="image/*" />
+    </label>
+  </div>
+
+  <!-- 中間：簽單預覽畫布 -->
+  <div class="canvas-wrapper">
+    <canvas id="previewCanvas"></canvas>
+  </div>
+
+  <!-- 下方：簽名板＋生成圖片，兩顆並排 -->
+  <div class="toolbar toolbar-actions">
+    <button id="openSignPad" disabled> ② 簽名 ✍️</button>
+    <button id="saveImage" disabled> ③ 生成 🖼️</button>
+  </div>
+
+  <!-- sigControls 結構保留但不使用（座標已固定） -->
+  <div id="sigControls" class="sig-controls"></div>
+
+  <!-- 舊下方結果區塊，實際不用 -->
+  <div class="result-wrapper">
+    <img id="resultImage" class="result-image" alt="簽名完成圖片預覽" />
+  </div>
+
+  <!-- 簽名板 Overlay -->
+  <div id="signPadOverlay">
+    <div class="sign-pad-box">
+      <div class="sign-pad-title">請在框內簽名</div>
+
+      <div class="sign-canvas-wrapper">
+        <canvas id="signCanvas"></canvas>
+      </div>
+
+      <!-- 三顆簡單按鈕：重置／取消／確認 -->
+      <div class="sign-pad-buttons">
+        <button id="clearSignature" class="btn-danger">重置</button>
+        <button id="cancelSignature" class="btn-secondary">取消</button>
+        <button id="useSignature" class="btn-primary">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 生成結果覆蓋預覽框（A 方案） -->
+  <div id="resultOverlay">
+    <div class="result-overlay-inner">
+      <div class="result-overlay-title">簽名完成的簽單</div>
+      <div class="result-overlay-hint">長按圖片 → 儲存到相簿</div>
+      <img id="resultFinal" alt="簽名完成簽單" />
+      <div class="result-overlay-buttons">
+        <button id="btnRedo" class="btn-secondary">🔁 重簽</button>
+        <button id="btnNew" class="btn-primary">📝 換一張</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 一、DOM 物件抓取
+    const bgInput = document.getElementById('bgUpload');
+    const canvas = document.getElementById('previewCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const openSignBtn = document.getElementById('openSignPad');
+    const saveImageBtn = document.getElementById('saveImage');
+
+    const signOverlay = document.getElementById('signPadOverlay');
+    const signCanvas = document.getElementById('signCanvas');
+    const signCtx = signCanvas.getContext('2d');
+    const clearSignatureBtn = document.getElementById('clearSignature');
+    const cancelSignatureBtn = document.getElementById('cancelSignature');
+    const useSignatureBtn = document.getElementById('useSignature');
+
+    const resultOverlay = document.getElementById('resultOverlay');
+    const resultFinal = document.getElementById('resultFinal');
+    const btnRedo = document.getElementById('btnRedo');
+    const btnNew = document.getElementById('btnNew');
+
+    // 二、狀態變數
+    let bgImage = null;           // 簽單底圖
+    let signatureImage = null;    // 簽名圖（Image）
+    let sigPosX = 0;              // 簽名 X 座標（以底圖原尺寸為單位）
+    let sigPosY = 0;              // 簽名 Y 座標
+    let sigScale = 1;             // 簽名縮放比例
+    let bgLoaded = false;         // 有沒有載入底圖
+
+    // 簽名板狀態
+    let drawing = false;
+    let lastSignX = 0;
+    let lastSignY = 0;
+    let signWidthCSS = 0;
+    let signHeightCSS = 0;
+    let isSignPadOpen = false;
+
+    // 三、簽名板或結果覆蓋預覽開啟時，阻止整頁滑動
+    document.addEventListener('touchmove', (e) => {
+      if (isSignPadOpen || resultOverlay.style.display === 'flex') {
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    // 四、載入簽單底圖
+    bgInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          bgImage = img;
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          bgLoaded = true;
+
+          openSignBtn.disabled = false;
+          saveImageBtn.disabled = false;
+
+          signatureImage = null;          // 換底圖時清除舊簽名
+          render();
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // 五、主畫布重繪（底圖＋簽名）
+    function render() {
+      if (!bgLoaded || !bgImage) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+
+      if (signatureImage) {
+        ctx.save();
+        ctx.translate(sigPosX, sigPosY);
+        ctx.scale(sigScale, sigScale);
+        ctx.drawImage(signatureImage, 0, 0);  // 簽名圖是透明底
+        ctx.restore();
+      }
+    }
+
+    // 六、開啟 / 關閉簽名板
+    openSignBtn.addEventListener('click', () => {
+      if (!bgLoaded) {
+        alert('請先選擇簽單圖片。');
+        return;
+      }
+
+      if (signatureImage) {
+        const ok = confirm(
+          '目前已經有一個簽名。\n\n' +
+          '若要重新簽名，請按「確定」。\n' +
+          '若要保留原簽名，請按「取消」。'
+        );
+        if (!ok) return;
+
+        signatureImage = null;
+        render();
+      }
+
+      openSignPad();
+    });
+
+    function openSignPad() {
+      signOverlay.classList.add('active');
+      document.body.classList.add('noscroll');
+      isSignPadOpen = true;
+
+      const wrapper = signCanvas.parentElement;
+      const boxWidth = wrapper.clientWidth;
+      const boxHeight = 260; // 不改高度，避免你座標要重調
+
+      signWidthCSS = boxWidth;
+      signHeightCSS = boxHeight;
+
+      const dpr = window.devicePixelRatio || 1;
+      signCanvas.style.width = boxWidth + 'px';
+      signCanvas.style.height = boxHeight + 'px';
+      signCanvas.width = boxWidth * dpr;
+      signCanvas.height = boxHeight * dpr;
+
+      signCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      signCtx.lineWidth = 3.5;
+      signCtx.lineCap = 'round';
+      signCtx.lineJoin = 'round';
+      signCtx.strokeStyle = '#000';
+
+      signCtx.clearRect(0, 0, signWidthCSS, signHeightCSS);
+    }
+
+    function closeSignPad() {
+      signOverlay.classList.remove('active');
+      document.body.classList.remove('noscroll');
+      isSignPadOpen = false;
+    }
+
+    // 七、簽名畫線邏輯
+    function getSignPos(evt) {
+      const rect = signCanvas.getBoundingClientRect();
+      const x = evt.clientX - rect.left;
+      const y = evt.clientY - rect.top;
+      return { x, y };
+    }
+
+    signCanvas.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      drawing = true;
+      const pos = getSignPos(e);
+      lastSignX = pos.x;
+      lastSignY = pos.y;
+    });
+
+    signCanvas.addEventListener('pointermove', (e) => {
+      if (!drawing) return;
+      e.preventDefault();
+      const pos = getSignPos(e);
+      signCtx.beginPath();
+      signCtx.moveTo(lastSignX, lastSignY);
+      signCtx.lineTo(pos.x, pos.y);
+      signCtx.stroke();
+      lastSignX = pos.x;
+      lastSignY = pos.y;
+    });
+
+    function stopDrawing() {
+      drawing = false;
+    }
+
+    signCanvas.addEventListener('pointerup', stopDrawing);
+    signCanvas.addEventListener('pointercancel', stopDrawing);
+    signCanvas.addEventListener('pointerleave', stopDrawing);
+
+    clearSignatureBtn.addEventListener('click', () => {
+      signCtx.clearRect(0, 0, signWidthCSS, signHeightCSS);
+    });
+
+    cancelSignatureBtn.addEventListener('click', () => {
+      closeSignPad();
+    });
+
+    // 八、使用簽名 → 套用固定座標（0.7 / 0.68）
+    useSignatureBtn.addEventListener('click', () => {
+      const dataUrl = signCanvas.toDataURL('image/png');
+      const img = new Image();
+
+      img.onload = () => {
+        signatureImage = img;
+
+        if (bgImage) {
+          // ★★ 固定簽名欄位設定區 ★★
+          sigScale = 0.3;                              // 簽名縮放成原本 30%
+          sigPosX = bgImage.naturalWidth * 0.7;        // X：簽名欄中央（你指定的 0.7）
+          sigPosY = bgImage.naturalHeight * 0.68;      // Y：簽名欄中央（你指定的 0.68）
+        } else {
+          sigScale = 1;
+          sigPosX = 50;
+          sigPosY = 50;
+        }
+
+        render();
+      };
+
+      img.src = dataUrl;
+      closeSignPad();
+    });
+
+    // 九、儲存成圖片 → 顯示覆蓋預覽框
+    saveImageBtn.addEventListener('click', () => {
+      if (!bgLoaded) {
+        alert('請先選擇簽單圖片。');
+        return;
+      }
+
+      render();   // 確保簽名已經疊上畫布
+
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          alert('產生圖片時發生錯誤，請再試一次。');
+          return;
+        }
+
+        const url = URL.createObjectURL(blob);
+        resultFinal.src = url;
+
+        resultOverlay.style.display = 'flex';
+        document.body.classList.add('noscroll');
+      }, 'image/png');
+    });
+
+    // 十、覆蓋預覽框按鈕：重新簽名 / 換簽單
+    btnRedo.addEventListener('click', () => {
+      resultOverlay.style.display = 'none';
+      document.body.classList.remove('noscroll');
+
+      signatureImage = null;
+      render();
+
+      openSignPad();
+    });
+
+    btnNew.addEventListener('click', () => {
+      resultOverlay.style.display = 'none';
+      document.body.classList.remove('noscroll');
+
+      signatureImage = null;
+      bgImage = null;
+      bgLoaded = false;
+      canvas.width = 0;
+      canvas.height = 0;
+      render();
+
+      bgInput.value = '';
+      openSignBtn.disabled = true;
+      saveImageBtn.disabled = true;
+
+      alert('請重新選擇新的簽單圖片。');
+    });
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
