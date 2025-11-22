@@ -3,23 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <title>線上簽名</title>
-  <!--
-    viewport 設定：禁止縮放（maximum-scale=1.0），避免使用者雙指放大縮小
-    以免影響簽名與畫布座標的對應關係。
-  -->
+  <!-- viewport 設定：禁止縮放，避免雙指縮放影響簽名座標 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <style>
     /* === 整體版面 === */
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       margin: 0;
-      padding: 12px;
+      padding: 0;
       background: #f5f5f5;
       color: #222;
-      font-size: 24px; /* 全站基準字體大小 */
+      font-size: 24px;
     }
 
-    /* 簽名板 / 覆蓋預覽 / 確認視窗 開啟時，鎖住背景頁的捲動與觸控 */
+    /* 簽名板 / 覆蓋預覽 / 確認視窗 / 放大預覽 開啟時，鎖住背景頁的捲動與觸控 */
     body.noscroll {
       overflow: hidden;
       touch-action: none;
@@ -32,9 +29,7 @@
       font-weight: 700;
     }
 
-    /* 簡短步驟說明若之後要加可以用這個 .hint */
-
-    /* 上方 toolbar：只放「選擇簽單圖片」，佔滿寬度 */
+    /* 上方 toolbar：只放「選擇簽單圖片」 */
     .toolbar {
       display: flex;
       flex-wrap: nowrap;
@@ -61,7 +56,7 @@
 
     button,
     input[type="file"] {
-      font-size: 1.95rem; /* 按鈕字體特大：方便長輩閱讀 */
+      font-size: 1.95rem;
       padding: 0.7rem 0.9rem;
       border-radius: 10px;
       border: 1px solid #ccc;
@@ -74,22 +69,23 @@
       cursor: not-allowed;
     }
 
-    /* 檔案選擇按鈕外觀：頂部單顆大按鈕，佔滿寬度 */
+    /* 檔案選擇按鈕外觀 */
     .file-label {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      background: #ffffff;
-      border: 1px solid #ccc;
+      background: #e3f2fd;        /* 淺藍底 */
+      border: 1px solid #90caf9;  /* 淺藍邊框 */
       border-radius: 10px;
       padding: 0.7rem 0.9rem;
-      font-size: 1.95rem; /* 和其他按鈕一致 */
+      font-size: 1.95rem;
       width: 100%;
       box-sizing: border-box;
+      color: #0d47a1;             /* 深藍字 */
     }
 
-    /* 真正的檔案 input 隱藏，留好看的按鈕外觀 */
+    /* 真正的檔案 input 隱藏 */
     #bgUpload {
       display: none;
     }
@@ -104,10 +100,7 @@
       margin-right: auto;
     }
 
-    /*
-      預覽簽單的主畫布（簽單＋簽名），
-      實際解析度用 JS 設定，這裡只控制顯示寬度。
-    */
+    /* 預覽簽單主畫布 */
     #previewCanvas {
       width: 100%;
       height: auto;
@@ -116,18 +109,17 @@
       touch-action: none;
     }
 
-    /* 下方動作按鈕列：簽名板＋生成圖片 兩顆並排，寬度自動平均 */
+    /* 下方動作按鈕列：簽名板＋生成圖片 */
     .toolbar-actions button {
       flex: 1;
       min-width: 0;
     }
 
-    /* 之前的簽名位置調整 UI：現在不用了，直接固定座標，所以整塊隱藏 */
+    /* 老的簽名位置調整 UI：已不用，隱藏 */
     .sig-controls {
       display: none;
     }
 
-    /* 舊的結果區塊保留但隱藏（實際不用） */
     .result-wrapper {
       display: none;
     }
@@ -136,12 +128,12 @@
       display: none;
     }
 
-    /* === 簽名板 Overlay（全螢幕） === */
+    /* === 簽名板 Overlay === */
     #signPadOverlay {
       position: fixed;
       inset: 0;
       background: rgba(0, 0, 0, 0.6);
-      display: none;          /* 需要簽名才打開 */
+      display: none;
       align-items: center;
       justify-content: center;
       z-index: 999;
@@ -175,11 +167,7 @@
       width: 100%;
     }
 
-    /*
-      真正簽名用的畫布：
-      - 實際解析度由 JS 根據裝置 pixelRatio 設定
-      - CSS 定義在畫面中看到的大小
-    */
+    /* 簽名用畫布 */
     #signCanvas {
       width: 100%;
       height: 260px;
@@ -202,20 +190,29 @@
       min-width: 90px;
     }
 
+    /* 有色按鈕樣式 */
     .btn-primary {
-      background: #007bff;
+      background: #2196f3;
       color: #fff;
-      border-color: #007bff;
+      border-color: #1e88e5;
+    }
+
+    .btn-main {
+      background: #4caf50;
+      color: #fff;
+      border-color: #43a047;
+    }
+
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #333;
+      border-color: #d0d0d0;
     }
 
     .btn-danger {
       background: #ff4d4f;
       color: #fff;
-      border-color: #ff4d4f;
-    }
-
-    .btn-secondary {
-      background: #f0f0f0;
+      border-color: #f44336;
     }
 
     .small-hint {
@@ -224,12 +221,12 @@
       text-align: center;
     }
 
-    /* === 生成結果覆蓋預覽框（A 方案） === */
+    /* === 生成結果覆蓋預覽框 === */
     #resultOverlay {
       position: fixed;
       inset: 0;
       background: #ffffff;
-      display: none;           /* 生成圖片後才打開 */
+      display: none;
       flex-direction: column;
       justify-content: center;
       align-items: center;
@@ -269,10 +266,9 @@
       line-height: 1.5;
     }
 
-    /* 結果覆蓋框的兩顆按鈕：一列一顆、滿版寬度 */
     .result-overlay-buttons {
       display: flex;
-      flex-direction: column;   /* 垂直排列，一列一顆 */
+      flex-direction: column;
       gap: 8px;
       width: 100%;
       margin-top: 4px;
@@ -285,15 +281,15 @@
       box-sizing: border-box;
     }
 
-    /* === 已有簽名時的「重新簽名？」大字體確認視窗 === */
+    /* === 已有簽名時的確認視窗 === */
     #confirmOverlay {
       position: fixed;
       inset: 0;
       background: rgba(0, 0, 0, 0.5);
-      display: none;           /* 需要時才打開 */
+      display: none;
       align-items: center;
       justify-content: center;
-      z-index: 1100;           /* 比簽名板與結果頁都高一層 */
+      z-index: 1100;
       padding: 12px;
       box-sizing: border-box;
     }
@@ -343,6 +339,61 @@
       padding: 0.8rem 0.8rem;
       box-sizing: border-box;
     }
+
+    /* 放大橫向預覽 Overlay */
+    #zoomOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);  /* 80% 黑底透明度 */
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1200;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    #zoomOverlay.active {
+      display: flex;
+    }
+
+    .zoom-inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .zoom-close-btn {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 999px;
+      padding: 0.6rem 1.2rem; /* 加大按鈕本體 */
+      font-size: 1.8rem;      /* X 字變大 */
+      border: 1px solid #ccc;
+    }
+
+    .zoom-image-wrapper {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    #zoomImage {
+      max-width: 90vh;
+      max-height: 90vw;
+      transform: rotate(90deg);
+      filter: brightness(1.15) contrast(1.05); /* 稍微變亮＋對比高一點 */
+    }
+
   </style>
 </head>
 <body>
@@ -351,7 +402,7 @@
   <!-- 上方：只有「選擇簽單圖片」這一顆大按鈕 -->
   <div class="toolbar toolbar-top">
     <label class="file-label">
-       ① 選擇簽單 📂
+      ① 選擇簽單 📂
       <input type="file" id="bgUpload" accept="image/*" />
     </label>
   </div>
@@ -363,8 +414,8 @@
 
   <!-- 下方：簽名板＋生成圖片，兩顆並排 -->
   <div class="toolbar toolbar-actions">
-    <button id="openSignPad" disabled> ② 簽名 ✍️</button>
-    <button id="saveImage" disabled> ③ 生成 🖼️</button>
+    <button id="openSignPad" class="btn-primary" disabled>② 簽名 ✍️</button>
+    <button id="saveImage" class="btn-main" disabled>③ 生成 🖼️</button>
   </div>
 
   <!-- sigControls 結構保留但不使用（座標已固定） -->
@@ -393,12 +444,22 @@
     </div>
   </div>
 
-  <!-- 生成結果覆蓋預覽框（A 方案） -->
+  <!-- 生成結果覆蓋預覽框 -->
   <div id="resultOverlay">
     <div class="result-overlay-inner">
       <div class="result-overlay-title">簽名完成的簽單</div>
-      <div class="result-overlay-hint">長按圖片 → 儲存到相簿</div>
+      <div class="result-overlay-hint">
+        長按圖片 → 儲存到相簿<br>
+        或直接手機截圖
+      </div>
+
       <img id="resultFinal" alt="簽名完成簽單" />
+
+      <!-- 放大圖片再截圖按鈕 -->
+      <button id="zoomOpen" class="btn-main" style="width:100%;margin-top:4px;">
+        🔍 放大圖片再截圖
+      </button>
+
       <div class="result-overlay-buttons">
         <button id="btnRedo" class="btn-secondary">🔁 重簽</button>
         <button id="btnNew" class="btn-primary">📝 換一張</button>
@@ -406,7 +467,7 @@
     </div>
   </div>
 
-  <!-- 新增：已有簽名時的大字體確認視窗 -->
+  <!-- 已有簽名時的大字體確認視窗 -->
   <div id="confirmOverlay">
     <div class="confirm-box">
       <div class="confirm-title">已經有簽名囉</div>
@@ -418,6 +479,16 @@
       <div class="confirm-buttons">
         <button id="confirmKeep" class="btn-secondary">保留現在的簽名</button>
         <button id="confirmRewrite" class="btn-danger">重新簽名</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 放大橫向預覽 Overlay -->
+  <div id="zoomOverlay">
+    <div class="zoom-inner">
+      <button id="zoomClose" class="zoom-close-btn">✕</button>
+      <div class="zoom-image-wrapper">
+        <img id="zoomImage" alt="放大簽單" />
       </div>
     </div>
   </div>
@@ -443,10 +514,14 @@
     const btnRedo = document.getElementById('btnRedo');
     const btnNew = document.getElementById('btnNew');
 
-    // 新增：大字體確認視窗的 DOM
     const confirmOverlay = document.getElementById('confirmOverlay');
     const confirmKeepBtn = document.getElementById('confirmKeep');
     const confirmRewriteBtn = document.getElementById('confirmRewrite');
+
+    const zoomOverlay = document.getElementById('zoomOverlay');
+    const zoomOpenBtn = document.getElementById('zoomOpen');
+    const zoomCloseBtn = document.getElementById('zoomClose');
+    const zoomImage = document.getElementById('zoomImage');
 
     // 二、狀態變數
     let bgImage = null;           // 簽單底圖
@@ -464,11 +539,14 @@
     let signHeightCSS = 0;
     let isSignPadOpen = false;
 
-    // 三、簽名板或結果覆蓋預覽 / 確認視窗 開啟時，阻止整頁滑動
+    // 三、簽名板 / 預覽 / 確認 / 放大 開啟時，阻止整頁滑動
     document.addEventListener('touchmove', (e) => {
-      if (isSignPadOpen ||
-          resultOverlay.style.display === 'flex' ||
-          confirmOverlay.classList.contains('active')) {
+      if (
+        isSignPadOpen ||
+        resultOverlay.style.display === 'flex' ||
+        confirmOverlay.classList.contains('active') ||
+        zoomOverlay.classList.contains('active')
+      ) {
         e.preventDefault();
       }
     }, { passive: false });
@@ -524,13 +602,12 @@
         return;
       }
 
-      // 如果已經有簽名，改用大字體確認視窗，而不是小小的 confirm()
+      // 如果已經有簽名，改用大字體確認視窗
       if (signatureImage) {
         openConfirmOverlay();
         return;
       }
 
-      // 沒有簽名 → 直接打開簽名板
       openSignPad();
     });
 
@@ -541,7 +618,7 @@
 
       const wrapper = signCanvas.parentElement;
       const boxWidth = wrapper.clientWidth;
-      const boxHeight = 260; // 不改高度，避免你座標要重調
+      const boxHeight = 260; // 高度固定，不動你的座標
 
       signWidthCSS = boxWidth;
       signHeightCSS = boxHeight;
@@ -611,7 +688,7 @@
       closeSignPad();
     });
 
-    // 八、使用簽名 → 套用固定座標（0.7 / 0.68）
+    // 八、使用簽名 → 套用固定座標
     useSignatureBtn.addEventListener('click', () => {
       const dataUrl = signCanvas.toDataURL('image/png');
       const img = new Image();
@@ -620,10 +697,10 @@
         signatureImage = img;
 
         if (bgImage) {
-          // ★★ 固定簽名欄位設定區 ★★
-          sigScale = 0.3;                              // 簽名縮放成原本 30%
-          sigPosX = bgImage.naturalWidth * 0.7;        // X：簽名欄中央（你指定的 0.7）
-          sigPosY = bgImage.naturalHeight * 0.68;      // Y：簽名欄中央（你指定的 0.68）
+          // ★ 固定簽名欄位座標：你提供的 0.7 / 0.68
+          sigScale = 0.3;
+          sigPosX = bgImage.naturalWidth * 0.7;
+          sigPosY = bgImage.naturalHeight * 0.68;
         } else {
           sigScale = 1;
           sigPosX = 50;
@@ -644,7 +721,7 @@
         return;
       }
 
-      render();   // 確保簽名已經疊上畫布
+      render();
 
       canvas.toBlob((blob) => {
         if (!blob) {
@@ -660,7 +737,7 @@
       }, 'image/png');
     });
 
-    // 十、覆蓋預覽框按鈕：重新簽名 / 換簽單
+    // 十、覆蓋預覽框按鈕：重簽 / 換簽單
     btnRedo.addEventListener('click', () => {
       resultOverlay.style.display = 'none';
       document.body.classList.remove('noscroll');
@@ -689,7 +766,7 @@
       alert('請重新選擇新的簽單圖片。');
     });
 
-    // 十一、新增：已有簽名時的大字體確認視窗控制
+    // 十一、已有簽名時的大字體確認視窗控制
     function openConfirmOverlay() {
       confirmOverlay.classList.add('active');
       document.body.classList.add('noscroll');
@@ -700,18 +777,33 @@
       document.body.classList.remove('noscroll');
     }
 
-    // 保留簽名 → 只關閉視窗
     confirmKeepBtn.addEventListener('click', () => {
       closeConfirmOverlay();
     });
 
-    // 重新簽名 → 清除簽名、重畫、再打開簽名板
     confirmRewriteBtn.addEventListener('click', () => {
       closeConfirmOverlay();
       signatureImage = null;
       render();
       openSignPad();
     });
+
+    // 十二、「🔍 放大圖片再截圖」功能
+    zoomOpenBtn.addEventListener('click', () => {
+      if (!resultFinal.src) {
+        alert('請先點選「生成」產生簽單圖片。');
+        return;
+      }
+      zoomImage.src = resultFinal.src;
+      zoomOverlay.classList.add('active');
+      document.body.classList.add('noscroll');
+    });
+
+    zoomCloseBtn.addEventListener('click', () => {
+      zoomOverlay.classList.remove('active');
+      document.body.classList.remove('noscroll');
+    });
   </script>
 </body>
 </html>
+
