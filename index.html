@@ -19,7 +19,7 @@
       font-size: 24px; /* 全站基準字體大小 */
     }
 
-    /* 簽名板 / 覆蓋預覽開啟時，鎖住背景頁的捲動與觸控 */
+    /* 簽名板 / 覆蓋預覽 / 確認視窗 開啟時，鎖住背景頁的捲動與觸控 */
     body.noscroll {
       overflow: hidden;
       touch-action: none;
@@ -32,14 +32,7 @@
       font-weight: 700;
     }
 
-    /* 簡短步驟說明（保留一行就好） */
-    .hint {
-      font-size: 1.2rem;
-      color: #555;
-      margin-bottom: 10px;
-      text-align: center;
-      line-height: 1.5;
-    }
+    /* 簡短步驟說明若之後要加可以用這個 .hint */
 
     /* 上方 toolbar：只放「選擇簽單圖片」，佔滿寬度 */
     .toolbar {
@@ -91,7 +84,7 @@
       border: 1px solid #ccc;
       border-radius: 10px;
       padding: 0.7rem 0.9rem;
-      font-size: 1.95rem;
+      font-size: 1.95rem; /* 和其他按鈕一致 */
       width: 100%;
       box-sizing: border-box;
     }
@@ -172,7 +165,7 @@
     }
 
     .sign-pad-title {
-      font-size: 1.3rem;
+      font-size: 1.5rem;
       font-weight: 600;
       text-align: center;
     }
@@ -291,6 +284,65 @@
       padding: 0.9rem 0.9rem;
       box-sizing: border-box;
     }
+
+    /* === 已有簽名時的「重新簽名？」大字體確認視窗 === */
+    #confirmOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;           /* 需要時才打開 */
+      align-items: center;
+      justify-content: center;
+      z-index: 1100;           /* 比簽名板與結果頁都高一層 */
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    #confirmOverlay.active {
+      display: flex;
+    }
+
+    .confirm-box {
+      background: #ffffff;
+      width: calc(100% - 40px);
+      max-width: 600px;
+      border-radius: 16px;
+      padding: 20px 16px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .confirm-title {
+      font-size: 1.8rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 4px;
+    }
+
+    .confirm-text {
+      font-size: 1.6rem;
+      text-align: center;
+      line-height: 1.6;
+      color: #444;
+    }
+
+    .confirm-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    .confirm-buttons button {
+      width: 100%;
+      font-size: 1.75rem;
+      padding: 0.8rem 0.8rem;
+      box-sizing: border-box;
+    }
   </style>
 </head>
 <body>
@@ -354,6 +406,22 @@
     </div>
   </div>
 
+  <!-- 新增：已有簽名時的大字體確認視窗 -->
+  <div id="confirmOverlay">
+    <div class="confirm-box">
+      <div class="confirm-title">已經有簽名囉</div>
+      <div class="confirm-text">
+        目前這張簽單上<br>
+        已經有一個簽名。<br><br>
+        確定要重新簽名嗎？
+      </div>
+      <div class="confirm-buttons">
+        <button id="confirmKeep" class="btn-secondary">保留現在的簽名</button>
+        <button id="confirmRewrite" class="btn-danger">重新簽名</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // 一、DOM 物件抓取
     const bgInput = document.getElementById('bgUpload');
@@ -375,6 +443,11 @@
     const btnRedo = document.getElementById('btnRedo');
     const btnNew = document.getElementById('btnNew');
 
+    // 新增：大字體確認視窗的 DOM
+    const confirmOverlay = document.getElementById('confirmOverlay');
+    const confirmKeepBtn = document.getElementById('confirmKeep');
+    const confirmRewriteBtn = document.getElementById('confirmRewrite');
+
     // 二、狀態變數
     let bgImage = null;           // 簽單底圖
     let signatureImage = null;    // 簽名圖（Image）
@@ -391,9 +464,11 @@
     let signHeightCSS = 0;
     let isSignPadOpen = false;
 
-    // 三、簽名板或結果覆蓋預覽開啟時，阻止整頁滑動
+    // 三、簽名板或結果覆蓋預覽 / 確認視窗 開啟時，阻止整頁滑動
     document.addEventListener('touchmove', (e) => {
-      if (isSignPadOpen || resultOverlay.style.display === 'flex') {
+      if (isSignPadOpen ||
+          resultOverlay.style.display === 'flex' ||
+          confirmOverlay.classList.contains('active')) {
         e.preventDefault();
       }
     }, { passive: false });
@@ -449,18 +524,13 @@
         return;
       }
 
+      // 如果已經有簽名，改用大字體確認視窗，而不是小小的 confirm()
       if (signatureImage) {
-        const ok = confirm(
-          '目前已經有一個簽名。\n\n' +
-          '若要重新簽名，請按「確定」。\n' +
-          '若要保留原簽名，請按「取消」。'
-        );
-        if (!ok) return;
-
-        signatureImage = null;
-        render();
+        openConfirmOverlay();
+        return;
       }
 
+      // 沒有簽名 → 直接打開簽名板
       openSignPad();
     });
 
@@ -618,19 +688,30 @@
 
       alert('請重新選擇新的簽單圖片。');
     });
+
+    // 十一、新增：已有簽名時的大字體確認視窗控制
+    function openConfirmOverlay() {
+      confirmOverlay.classList.add('active');
+      document.body.classList.add('noscroll');
+    }
+
+    function closeConfirmOverlay() {
+      confirmOverlay.classList.remove('active');
+      document.body.classList.remove('noscroll');
+    }
+
+    // 保留簽名 → 只關閉視窗
+    confirmKeepBtn.addEventListener('click', () => {
+      closeConfirmOverlay();
+    });
+
+    // 重新簽名 → 清除簽名、重畫、再打開簽名板
+    confirmRewriteBtn.addEventListener('click', () => {
+      closeConfirmOverlay();
+      signatureImage = null;
+      render();
+      openSignPad();
+    });
   </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
