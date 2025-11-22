@@ -80,13 +80,14 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
-      background: #ffffff;
-      border: 1px solid #ccc;
+      background: #e3f2fd;        /* 淺藍底 */
+      border: 1px solid #90caf9;  /* 淺藍邊框 */
       border-radius: 10px;
       padding: 0.7rem 0.9rem;
       font-size: 1.95rem; /* 和其他按鈕一致 */
       width: 100%;
       box-sizing: border-box;
+      color: #0d47a1;             /* 深藍字 */
     }
 
     /* 真正的檔案 input 隱藏，留好看的按鈕外觀 */
@@ -203,19 +204,27 @@
     }
 
     .btn-primary {
-      background: #007bff;
+      background: #2196f3;
       color: #fff;
-      border-color: #007bff;
+      border-color: #1e88e5;
+    }
+
+    .btn-main {
+      background: #4caf50;
+      color: #fff;
+      border-color: #43a047;
+    }
+
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #333;
+      border-color: #d0d0d0;
     }
 
     .btn-danger {
       background: #ff4d4f;
       color: #fff;
-      border-color: #ff4d4f;
-    }
-
-    .btn-secondary {
-      background: #f0f0f0;
+      border-color: #f44336;
     }
 
     .small-hint {
@@ -343,6 +352,72 @@
       padding: 0.8rem 0.8rem;
       box-sizing: border-box;
     }
+
+    /* 放大橫向預覽 Overlay */
+    #zoomOverlay {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: none;              /* 需要時才顯示 */
+      align-items: center;
+      z-index: 1200;              /* 比其他 overlay 再高一層 */
+      padding: 12px;
+      box-sizing: border-box;
+    }
+    #zoomOverlay.active {
+      display: flex;
+    }
+
+    .zoom-inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* 右上角 X 按鈕 */
+    .zoom-close-btn {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 999px;
+      padding: 0.4rem 0.9rem;
+      font-size: 1.4rem;
+      border: 1px solid #ccc;
+    }
+
+    /* 讓圖片置中、裁掉多餘邊緣 */
+    .zoom-image-wrapper {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* 橫向旋轉圖片，盡量吃滿畫面 */
+    #zoomImage {
+      max-width: 90vh;   /* 用螢幕高度當作圖片寬度上限 */
+      max-height: 90vw;  /* 用螢幕寬度當作圖片高度上限 */
+      transform: rotate(90deg);
+    }
+
+    /* 下方小提示：提醒橫放手機＋截圖 */
+    .zoom-hint {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      font-size: 1.4rem;
+      text-align: center;
+    }
+
   </style>
 </head>
 <body>
@@ -363,8 +438,8 @@
 
   <!-- 下方：簽名板＋生成圖片，兩顆並排 -->
   <div class="toolbar toolbar-actions">
-    <button id="openSignPad" disabled> ② 簽名 ✍️</button>
-    <button id="saveImage" disabled> ③ 生成 🖼️</button>
+    <button id="openSignPad" class="btn-primary" disabled>② 簽名 ✍️</button>
+    <button id="saveImage" class="btn-main" disabled>③ 生成 🖼️</button>
   </div>
 
   <!-- sigControls 結構保留但不使用（座標已固定） -->
@@ -397,8 +472,18 @@
   <div id="resultOverlay">
     <div class="result-overlay-inner">
       <div class="result-overlay-title">簽名完成的簽單</div>
-      <div class="result-overlay-hint">長按圖片 → 儲存到相簿</div>
+      <div class="result-overlay-hint">
+        長按圖片 → 儲存到相簿<br>
+        或直接手機截圖
+      </div>
+      
       <img id="resultFinal" alt="簽名完成簽單" />
+
+      <!-- 新增：放大圖片再截圖按鈕 -->
+      <button id="zoomOpen" class="btn-main" style="width:100%;margin-top:4px;">
+        🔍 放大圖片再截圖
+      </button>
+      
       <div class="result-overlay-buttons">
         <button id="btnRedo" class="btn-secondary">🔁 重簽</button>
         <button id="btnNew" class="btn-primary">📝 換一張</button>
@@ -443,6 +528,12 @@
     const btnRedo = document.getElementById('btnRedo');
     const btnNew = document.getElementById('btnNew');
 
+    const zoomOverlay = document.getElementById('zoomOverlay');
+    const zoomOpenBtn = document.getElementById('zoomOpen');
+    const zoomCloseBtn = document.getElementById('zoomClose');
+    const zoomImage = document.getElementById('zoomImage');
+
+
     // 新增：大字體確認視窗的 DOM
     const confirmOverlay = document.getElementById('confirmOverlay');
     const confirmKeepBtn = document.getElementById('confirmKeep');
@@ -468,7 +559,8 @@
     document.addEventListener('touchmove', (e) => {
       if (isSignPadOpen ||
           resultOverlay.style.display === 'flex' ||
-          confirmOverlay.classList.contains('active')) {
+          confirmOverlay.classList.contains('active')) { ||
+          zoomOverlay.classList.contains('active')) {
         e.preventDefault();
       }
     }, { passive: false });
@@ -713,5 +805,33 @@
       openSignPad();
     });
   </script>
+  
+  <!-- 放大橫向預覽 Overlay -->
+  <div id="zoomOverlay">
+    <div class="zoom-inner">
+      <!-- 右上角關閉 X -->
+      <button id="zoomClose" class="zoom-close-btn">✕</button>
+
+      <!-- 中央是旋轉後的圖片 -->
+      <div class="zoom-image-wrapper">
+        <img id="zoomImage" alt="放大簽單" />
+      </div>
+
+      <div class="zoom-hint">請將手機橫放後截圖</div>
+    </div>
+  </div>
+
+  // 「🔍 放大圖片再截圖」：打開放大畫面
+  zoomOpenBtn.addEventListener('click', () => {
+    zoomImage.src = resultFinal.src;        // 使用同一張簽名完成的圖片
+    zoomOverlay.classList.add('active');    // 顯示放大用的黑底畫面
+  });
+
+  // 「✕」關閉放大畫面
+  zoomCloseBtn.addEventListener('click', () => {
+    zoomOverlay.classList.remove('active');   // 把黑底畫面關掉
+  });
+  
 </body>
 </html>
+
